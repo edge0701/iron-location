@@ -53,141 +53,157 @@ milliseconds.
   (function() {
     'use strict';
 
-    Polymer({
-      is: 'iron-location',
+    class IronLocation extends Polymer.Element {
+      static get is() { return 'iron-location' }
 
-      properties: {
-        /**
-         * The pathname component of the URL.
-         */
-        path: {
-          type: String,
-          notify: true,
-          value: function() {
-            return window.decodeURIComponent(window.location.pathname);
-          }
-        },
+      static get config() {
+        let configuration = {
+          properties: {
+            /**
+            * The pathname component of the URL.
+            */
+            path: {
+              type: String,
+              notify: true,
+              value: function() {
+                return window.decodeURIComponent(window.location.pathname);
+              }
+            },
 
-        /**
-         * The query string portion of the URL.
-         */
-        query: {
-          type: String,
-          notify: true,
-          value: function() {
-            return window.decodeURIComponent(window.location.search.slice(1));
-          }
-        },
+            /**
+            * The query string portion of the URL.
+            */
+            query: {
+              type: String,
+              notify: true,
+              value: function() {
+                return window.decodeURIComponent(window.location.search.slice(1));
+              }
+            },
 
-        /**
-         * The hash component of the URL.
-         */
-        hash: {
-          type: String,
-          notify: true,
-          value: function() {
-            return window.decodeURIComponent(window.location.hash.slice(1));
-          }
-        },
+            /**
+            * The hash component of the URL.
+            */
+            hash: {
+              type: String,
+              notify: true,
+              value: function() {
+                return window.decodeURIComponent(window.location.hash.slice(1));
+              }
+            },
 
-        /**
-         * If the user was on a URL for less than `dwellTime` milliseconds, it
-         * won't be added to the browser's history, but instead will be replaced
-         * by the next entry.
-         *
-         * This is to prevent large numbers of entries from clogging up the user's
-         * browser history. Disable by setting to a negative number.
-         */
-        dwellTime: {
-          type: Number,
-          value: 2000
-        },
+            /**
+            * If the user was on a URL for less than `dwellTime` milliseconds, it
+            * won't be added to the browser's history, but instead will be replaced
+            * by the next entry.
+            *
+            * This is to prevent large numbers of entries from clogging up the user's
+            * browser history. Disable by setting to a negative number.
+            */
+            dwellTime: {
+              type: Number,
+              value: 2000
+            },
 
-        /**
-         * A regexp that defines the set of URLs that should be considered part
-         * of this web app.
-         *
-         * Clicking on a link that matches this regex won't result in a full page
-         * navigation, but will instead just update the URL state in place.
-         *
-         * This regexp is given everything after the origin in an absolute
-         * URL. So to match just URLs that start with /search/ do:
-         *     url-space-regex="^/search/"
-         *
-         * @type {string|RegExp}
-         */
-        urlSpaceRegex: {
-          type: String,
-          value: ''
-        },
+            /**
+            * A regexp that defines the set of URLs that should be considered part
+            * of this web app.
+            *
+            * Clicking on a link that matches this regex won't result in a full page
+            * navigation, but will instead just update the URL state in place.
+            *
+            * This regexp is given everything after the origin in an absolute
+            * URL. So to match just URLs that start with /search/ do:
+            *     url-space-regex="^/search/"
+            *
+            * @type {string|RegExp}
+            */
+            urlSpaceRegex: {
+              type: String,
+              value: ''
+            },
 
-        /**
-         * urlSpaceRegex, but coerced into a regexp.
-         *
-         * @type {RegExp}
-         */
-        _urlSpaceRegExp: {
-          computed: '_makeRegExp(urlSpaceRegex)'
-        },
+            /**
+            * urlSpaceRegex, but coerced into a regexp.
+            *
+            * @type {RegExp}
+            */
+            _urlSpaceRegExp: {
+              computed: '_makeRegExp(urlSpaceRegex)'
+            },
 
-        _lastChangedAt: {
-          type: Number
-        },
+            _lastChangedAt: {
+              type: Number
+            },
 
-        _initialized: {
-          type: Boolean,
-          value: false
+            _initialized: {
+              type: Boolean,
+              value: false
+            },
+
+            __eventFunctions: {
+              type: Object,
+              value: function() { return {}; }
+            }
+          },
+
+          observers: [
+            '_updateUrl(path, query, hash)'
+          ]
         }
-      },
 
-      hostAttributes: {
-        hidden: true
-      },
+        return configuration;
+      }
 
-      observers: [
-        '_updateUrl(path, query, hash)'
-      ],
-
-      attached: function() {
+      connectedCallback() {
+        super.connectedCallback();
         this.initialize();
-      },
+      }
 
-      ready: function() {
-        if (!Polymer.version || Polymer.version >= '2') {
-          this.initialize();        
-        }
-      },
+      disconnectedCallback() {
+        window.removeEventListener('hashchange', this.__eventFunctions._hashChanged);
+        window.removeEventListener('location-changed', this.__eventFunctions._urlChanged);
+        window.removeEventListener('popstate', this.__eventFunctions._urlChanged);
+        /** @type {!HTMLBodyElement} */(document.body)
+            .removeEventListener('click', this.__eventFunctions._globalOnClick);
+        this._initialized = false;
+        super.disconnectedCallback();
+      }
 
-      initialize: function() {
+      ready() {
+        this.initialize();
+        this._ensureAttribute('hidden', true);
+        super.ready();
+      }
+
+      initialize() {
         if (this._initialized) {
           return;
         }
 
-        this.listen(window, 'hashchange', '_hashChanged');
-        this.listen(window, 'location-changed', '_urlChanged');
-        this.listen(window, 'popstate', '_urlChanged');
-        this.listen(/** @type {!HTMLBodyElement} */(document.body), 'click', '_globalOnClick');
+        // these function references needed for removing event listeners
+        this.__eventFunctions._hashChanged = this._hashChanged.bind(this);
+        this.__eventFunctions._urlChanged = this._urlChanged.bind(this);
+        this.__eventFunctions._globalOnClick = this._globalOnClick.bind(this);
+
+        window.addEventListener('hashchange', this.__eventFunctions._hashChanged);
+        window.addEventListener('location-changed', this.__eventFunctions._urlChanged);
+        window.addEventListener('popstate', this.__eventFunctions._urlChanged);
+        /** @type {!HTMLBodyElement} */(document.body)
+            .addEventListener('click', this.__eventFunctions._globalOnClick);
         // Give a 200ms grace period to make initial redirects without any
         // additions to the user's history.
         this._lastChangedAt = window.performance.now() - (this.dwellTime - 200);
         this._initialized = true;
 
         this._urlChanged();
-      },
+      }
 
-      detached: function() {
-        this.unlisten(window, 'hashchange', '_hashChanged');
-        this.unlisten(window, 'location-changed', '_urlChanged');
-        this.unlisten(window, 'popstate', '_urlChanged');
-        this.unlisten(/** @type {!HTMLBodyElement} */(document.body), 'click', '_globalOnClick');
-        this._initialized = false;
-      },
-
-      _hashChanged: function() {
+      _hashChanged() {
         this.hash = window.decodeURIComponent(window.location.hash.substring(1));
-      },
+      }
 
-      _urlChanged: function() {
+      _urlChanged() {
         // We want to extract all info out of the updated URL before we
         // try to write anything back into it.
         //
@@ -200,19 +216,19 @@ milliseconds.
             window.location.search.substring(1));
         this._dontUpdateUrl = false;
         this._updateUrl();
-      },
+      }
 
-      _getUrl: function() {
-        var partiallyEncodedPath = window.encodeURI(
+      _getUrl() {
+        let partiallyEncodedPath = window.encodeURI(
             this.path).replace(/\#/g, '%23').replace(/\?/g, '%3F');
-        var partiallyEncodedQuery = '';
+        let partiallyEncodedQuery = '';
 
         if (this.query) {
           partiallyEncodedQuery = '?' + window.encodeURI(
               this.query).replace(/\#/g, '%23');
         }
 
-        var partiallyEncodedHash = '';
+        let partiallyEncodedHash = '';
 
         if (this.hash) {
           partiallyEncodedHash = '#' + window.encodeURI(this.hash);
@@ -220,9 +236,9 @@ milliseconds.
 
         return (
             partiallyEncodedPath + partiallyEncodedQuery + partiallyEncodedHash);
-      },
+      }
 
-      _updateUrl: function() {
+      _updateUrl() {
         if (this._dontUpdateUrl || !this._initialized) {
           return;
         }
@@ -236,12 +252,12 @@ milliseconds.
           return;
         }
 
-        var newUrl = this._getUrl();
+        let newUrl = this._getUrl();
         // Need to use a full URL in case the containing page has a base URI.
-        var fullNewUrl = new URL(
+        let fullNewUrl = new URL(
             newUrl, window.location.protocol + '//' + window.location.host).href;
-        var now = window.performance.now();
-        var shouldReplace = this._lastChangedAt + this.dwellTime > now;
+        let now = window.performance.now();
+        let shouldReplace = this._lastChangedAt + this.dwellTime > now;
         this._lastChangedAt = now;
 
         if (shouldReplace) {
@@ -250,8 +266,14 @@ milliseconds.
           window.history.pushState({}, '', fullNewUrl);
         }
 
-        this.fire('location-changed', {}, {node: window});
-      },
+        let ev = new CustomEvent('location-changed', {
+          bubbles: true,
+          composed: true,
+          cancelable: true
+        });
+
+        window.dispatchEvent(ev);
+      }
 
       /**
        * A necessary evil so that links work as expected. Does its best to
@@ -259,7 +281,7 @@ milliseconds.
        *
        * @param {MouseEvent} event .
        */
-      _globalOnClick: function(event) {
+      _globalOnClick(event) {
         // If another event handler has stopped this event then there's nothing
         // for us to do. This can happen e.g. when there are multiple
         // iron-location elements in a page.
@@ -267,7 +289,7 @@ milliseconds.
           return;
         }
 
-        var href = this._getSameOriginLinkHref(event);
+        let href = this._getSameOriginLinkHref(event);
 
         if (!href) {
           return;
@@ -282,8 +304,15 @@ milliseconds.
         }
 
         window.history.pushState({}, '', href);
-        this.fire('location-changed', {}, {node: window});
-      },
+
+        let ev = new CustomEvent('location-changed', {
+          bubbles: true,
+          composed: true,
+          cancelable: true
+        });
+
+        window.dispatchEvent(ev);
+      }
 
       /**
        * Returns the absolute URL of the link (if any) that this click event
@@ -293,7 +322,7 @@ milliseconds.
        * @param {MouseEvent} event .
        * @return {string?} .
        */
-      _getSameOriginLinkHref: function(event) {
+      _getSameOriginLinkHref(event) {
         // We only care about left-clicks.
         if (event.button !== 0) {
           return null;
@@ -305,11 +334,11 @@ milliseconds.
           return null;
         }
 
-        var eventPath = Polymer.dom(event).path;
-        var anchor = null;
+        let eventPath = event.composedPath();
+        let anchor = null;
 
-        for (var i = 0; i < eventPath.length; i++) {
-          var element = eventPath[i];
+        for (let i = 0; i < eventPath.length; i++) {
+          let element = eventPath[i];
 
           if (element.tagName === 'A' && element.href) {
             anchor = element;
@@ -334,11 +363,11 @@ milliseconds.
           return null;
         }
 
-        var href = anchor.href;
+        let href = anchor.href;
 
         // It only makes sense for us to intercept same-origin navigations.
         // pushState/replaceState don't work with cross-origin links.
-        var url;
+        let url;
 
         if (document.baseURI != null) {
           url = new URL(href, /** @type {string} */(document.baseURI));
@@ -346,7 +375,7 @@ milliseconds.
           url = new URL(href);
         }
 
-        var origin;
+        let origin;
 
         // IE Polyfill
         if (window.location.origin) {
@@ -363,7 +392,7 @@ milliseconds.
           return null;
         }
 
-        var normalizedHref = url.pathname + url.search + url.hash;
+        let normalizedHref = url.pathname + url.search + url.hash;
 
         // If we've been configured not to handle this url... don't handle it!
         if (this._urlSpaceRegExp &&
@@ -372,14 +401,17 @@ milliseconds.
         }
 
         // Need to use a full URL in case the containing page has a base URI.
-        var fullNormalizedHref = new URL(
+        let fullNormalizedHref = new URL(
             normalizedHref, window.location.href).href;
         return fullNormalizedHref;
-      },
+      }
 
-      _makeRegExp: function(urlSpaceRegex) {
+      _makeRegExp(urlSpaceRegex) {
+        console.log(urlSpaceRegex);
         return RegExp(urlSpaceRegex);
       }
-    });
+    }
+
+    customElements.define(IronLocation.is, IronLocation);
   })();
 </script>
