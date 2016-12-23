@@ -133,7 +133,18 @@ milliseconds.
         _initialized: {
           type: Boolean,
           value: false
+        },
+
+        _skipLocationChangedEvent: {
+          type: Boolean,
+          value: false
         }
+
+         /**
+          * Fired before path, query, hash are updated. Can be canceled.
+          *
+          * @event before-location-changed
+          */
       },
       hostAttributes: {
         hidden: true
@@ -163,7 +174,17 @@ milliseconds.
       _hashChanged: function() {
         this.hash = window.decodeURIComponent(window.location.hash.substring(1));
       },
-      _urlChanged: function() {
+      _urlChanged: function(event) {
+        if (this.fire('before-location-changed', {}, {cancelable: true}).defaultPrevented) {
+          if (event.type === 'popstate') {
+              this._skipLocationChangedEvent = true;
+              this._updateUrl();
+          } else if (event.type === 'location-changed') {
+              window.history.back();
+          }
+          return;
+        }
+
         // We want to extract all info out of the updated URL before we
         // try to write anything back into it.
         //
@@ -214,7 +235,12 @@ milliseconds.
         } else {
           window.history.pushState({}, '', fullNewUrl);
         }
-        this.fire('location-changed', {}, {node: window});
+
+        if (this._skipLocationChangedEvent) {
+          this._skipLocationChangedEvent = false;
+        } else {
+          this.fire('location-changed', {}, {node: window});
+        }
       },
       /**
        * A necessary evil so that links work as expected. Does its best to
